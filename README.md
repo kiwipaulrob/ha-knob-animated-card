@@ -99,6 +99,33 @@ Design notes (learned live, Nov 2026):
 Unknown gesture strings fall back to grey — the card never errors on
 an unrecognised state.
 
+## Wiring it to music (example)
+
+The card is display-only — it never touches your player. To make the knob
+*control* Music Assistant, see
+[`examples/home-assistant-automations.yaml`](examples/home-assistant-automations.yaml):
+two MQTT-topic automations (append to `automations.yaml`, then call the
+`automation.reload` service — no restart) that forward each action to a relay:
+
+| Knob action | Music result (via relay) |
+|---|---|
+| turn right / left | volume ±2 per detent |
+| press | play/pause toggle |
+| hold + turn right / left | next / previous track |
+| hold (10 s guard) | favourite + spoken announcement |
+| double-press | next track |
+
+The example posts to a `rest_command` fronting the
+[ma-fav-button relay](https://github.com/kiwipaulrob/ma-fav-button) — any HTTP
+endpoint accepting `{event_type, steps}` works; adapt the action to yours.
+The relay resolves the *active* player on every press (following you between
+rooms) and never targets TVs. `hue_move` repeats ~2/s while held, so the hold
+automation carries a 10-second self-`last_triggered` guard — without it one
+hold fires a dozen favourites (and a dozen announcements). Note: YAML
+automation entity IDs slugify from the `alias`, not the `id:` — point the
+guard at the full `automation.<alias_slug>` or it silently never matches.
+Hold speaks the track name aloud, so expect noise when testing it.
+
 ## Installation
 
 ### Option A — manual (2 minutes)

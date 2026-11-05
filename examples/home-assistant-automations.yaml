@@ -1,0 +1,49 @@
+# Knob 2 — Music Assistant wiring (dimmer parity), live-verified Nov 2026.
+# Append to automations.yaml, then call the automation.reload service (no restart).
+# Forwards each action on zigbee2mqtt/knob 2/action to a relay rest_command
+# (example: ma-fav-button https://github.com/kiwipaulrob/ma-fav-button —
+# any HTTP endpoint accepting {event_type, steps} works; adapt the action).
+# Rename the topic to your knob friendly name. CAUTION: the hold guard
+# references this automation’s own entity ID, which HA slugifies from the
+# alias (not the id:) — rename the alias and you must update the guard.
+
+- id: knob_2_rotary_control
+  alias: Knob 2 rotary control (HOBEIAN ZG-101ZD)
+  triggers:
+    - trigger: mqtt
+      topic: zigbee2mqtt/knob 2/action
+  variables:
+    event_map:
+      brightness_step_up: rotate_right
+      brightness_step_down: rotate_left
+      toggle: press
+      double: rotate_right_pressed
+      color_temperature_step_up: rotate_right_pressed
+      color_temperature_step_down: rotate_left_pressed
+  conditions:
+    - condition: template
+      value_template: "{{ trigger.payload in event_map }}"
+  actions:
+    - action: rest_command.ma_dimmer
+      data:
+        event_type: "{{ event_map[trigger.payload] }}"
+        steps: 1
+  mode: queued
+  max: 10
+- id: knob_2_hold_fav
+  alias: Knob 2 hold for favourite (HOBEIAN ZG-101ZD)
+  triggers:
+    - trigger: mqtt
+      topic: zigbee2mqtt/knob 2/action
+      payload: hue_move
+  conditions:
+    - condition: template
+      value_template: >
+        {{ (as_timestamp(now()) - as_timestamp(
+          state_attr('automation.knob_2_hold_for_favourite_hobeian_zg_101zd','last_triggered') or 0)) > 10 }}
+  actions:
+    - action: rest_command.ma_dimmer
+      data:
+        event_type: long_press
+        steps: 1
+  mode: single
