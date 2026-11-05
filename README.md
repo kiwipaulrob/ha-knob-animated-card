@@ -55,8 +55,48 @@ Three sensors (names are configurable, these are the defaults):
 
 These come from a Zigbee2MQTT `zigbee2mqtt/<name>/action` topic in
 **command mode** (no `event`-mode flip needed) via trigger-based template
-sensors: last-action state plus a dial angle accumulated in ±15° steps
-`% 360`. Unknown gesture strings fall back to grey — the card never errors on
+sensors. Drop this into `configuration.yaml` (rename to taste), then call the
+`template.reload` service — no restart:
+
+```yaml
+template:
+  - trigger:
+      - platform: mqtt
+        topic: zigbee2mqtt/knob 2/action
+    sensor:
+      - name: "Knob 2 last action"
+        unique_id: knob_2_last_action
+        state: "{{ trigger.payload }}"
+      - name: "Knob 2 dial angle"
+        unique_id: knob_2_dial_angle
+        unit_of_measurement: "°"
+        state: >
+          {% set a = (this.state | float(0)) %}
+          {% if trigger.payload in ['brightness_step_up', 'color_temperature_step_up'] %}{{ (a + 15) % 360 }}
+          {% elif trigger.payload in ['brightness_step_down', 'color_temperature_step_down'] %}{{ (a - 15) % 360 }}
+          {% else %}{{ a }}{% endif %}
+      - name: "Knob 2 gesture"
+        unique_id: knob_2_gesture
+        state: >
+          {% set m = {'toggle': 'press', 'double': 'double press', 'brightness_step_up': 'turn right', 'brightness_step_down': 'turn left', 'hue_move': 'HOLD', 'color_temperature_step_up': 'hold + turn right', 'color_temperature_step_down': 'hold + turn left'} %}
+          {{ m.get(trigger.payload, trigger.payload) }}
+```
+
+Design notes (learned live, Nov 2026):
+
+- The angle accumulates **both** free-turn (`brightness_step_*`) and hold+turn
+  (`color_temperature_step_*`) detents at ±15° per message. Press, double-press
+  and hold carry no rotation data, so they correctly leave the angle frozen —
+  an early version only counted free-turn, which made the dial sit dead while
+  press-turning.
+- The device sends `double`, not `double press`, on double-press — mapped
+  explicitly above, otherwise the card shows the raw string.
+- Diagnosing a "frozen dial": correlate `last_action` history with dial-angle
+  history. Repeated identical actions leave **no** new history rows (same state
+  → no state change), while the accumulator moves on every detent — so a spin
+  shows as one action row plus a staircase of angle rows.
+
+Unknown gesture strings fall back to grey — the card never errors on
 an unrecognised state.
 
 ## Installation
